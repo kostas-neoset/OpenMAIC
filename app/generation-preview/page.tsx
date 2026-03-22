@@ -26,6 +26,11 @@ import type { Stage } from '@/lib/types/stage';
 import type { SceneOutline, PdfImage, ImageMapping } from '@/lib/types/generation';
 import { AgentRevealModal } from '@/components/agent/agent-reveal-modal';
 import { createLogger } from '@/lib/logger';
+import {
+  buildOutlineRequestPayload,
+  buildSceneContentRequestPayload,
+  readApiErrorMessage,
+} from '@/lib/generation/request-payloads';
 import { type GenerationSessionState, ALL_STEPS, getActiveSteps } from './types';
 import { StepVisualizer } from './components/visualizers';
 
@@ -196,8 +201,7 @@ function GenerationPreviewContent() {
         });
 
         if (!parseResponse.ok) {
-          const errorData = await parseResponse.json();
-          throw new Error(errorData.error || t('generation.pdfParseFailed'));
+          throw new Error(await readApiErrorMessage(parseResponse, t('generation.pdfParseFailed')));
         }
 
         const parseResult = await parseResponse.json();
@@ -468,25 +472,28 @@ function GenerationPreviewContent() {
 
         outlines = await new Promise<SceneOutline[]>((resolve, reject) => {
           const collected: SceneOutline[] = [];
+          const outlineRequest = buildOutlineRequestPayload({
+            requirements: currentSession.requirements,
+            pdfText: currentSession.pdfText,
+            pdfImages: currentSession.pdfImages,
+            imageMapping,
+            researchContext: currentSession.researchContext,
+            agents,
+          });
 
           fetch('/api/generate/scene-outlines-stream', {
             method: 'POST',
             headers: getApiHeaders(),
-            body: JSON.stringify({
-              requirements: currentSession.requirements,
-              pdfText: currentSession.pdfText,
-              pdfImages: currentSession.pdfImages,
-              imageMapping,
-              researchContext: currentSession.researchContext,
-              agents,
-            }),
+            body: JSON.stringify(outlineRequest),
             signal,
           })
             .then((res) => {
               if (!res.ok) {
-                return res.json().then((d) => {
-                  reject(new Error(d.error || t('generation.outlineGenerateFailed')));
-                });
+                return readApiErrorMessage(res, t('generation.outlineGenerateFailed')).then(
+                  (message) => {
+                    reject(new Error(message));
+                  },
+                );
               }
 
               const reader = res.body?.getReader();
@@ -591,26 +598,26 @@ function GenerationPreviewContent() {
       store.setGeneratingOutlines(outlines);
 
       const firstOutline = outlines[0];
+      const contentRequest = buildSceneContentRequestPayload({
+        outline: firstOutline,
+        allOutlines: outlines,
+        pdfImages: currentSession.pdfImages,
+        imageMapping,
+        stageInfo,
+        stageId: stage.id,
+        agents,
+      });
 
       // Step 2: Generate content (currentStepIndex is already 2)
       const contentResp = await fetch('/api/generate/scene-content', {
         method: 'POST',
         headers: getApiHeaders(),
-        body: JSON.stringify({
-          outline: firstOutline,
-          allOutlines: outlines,
-          pdfImages: currentSession.pdfImages,
-          imageMapping,
-          stageInfo,
-          stageId: stage.id,
-          agents,
-        }),
+        body: JSON.stringify(contentRequest),
         signal,
       });
 
       if (!contentResp.ok) {
-        const errorData = await contentResp.json().catch(() => ({ error: 'Request failed' }));
-        throw new Error(errorData.error || t('generation.sceneGenerateFailed'));
+        throw new Error(await readApiErrorMessage(contentResp, t('generation.sceneGenerateFailed')));
       }
 
       const contentData = await contentResp.json();
@@ -638,8 +645,7 @@ function GenerationPreviewContent() {
       });
 
       if (!actionsResp.ok) {
-        const errorData = await actionsResp.json().catch(() => ({ error: 'Request failed' }));
-        throw new Error(errorData.error || t('generation.sceneGenerateFailed'));
+        throw new Error(await readApiErrorMessage(actionsResp, t('generation.sceneGenerateFailed')));
       }
 
       const data = await actionsResp.json();
