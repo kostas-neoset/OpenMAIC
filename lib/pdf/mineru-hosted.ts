@@ -5,8 +5,11 @@ import type { PDFParserConfig } from './types';
 export const MINERU_OFFICIAL_API_ROOT = 'https://mineru.net/api/v4';
 const MINERU_OFFICIAL_SITE_ROOT = 'https://mineru.net';
 export const MINERU_DEFAULT_MODEL_VERSION = 'vlm';
+export const MINERU_BATCH_REQUEST_TIMEOUT_MS = 60_000;
+export const MINERU_STATUS_REQUEST_TIMEOUT_MS = 60_000;
+export const MINERU_FILE_TRANSFER_TIMEOUT_MS = 5 * 60_000;
 export const MINERU_POLL_INTERVAL_MS = 2_000;
-export const MINERU_POLL_TIMEOUT_MS = 3 * 60_000;
+export const MINERU_POLL_TIMEOUT_MS = 10 * 60_000;
 
 interface MinerUApiResponse<T> {
   code?: number;
@@ -143,7 +146,7 @@ export async function createMinerUUploadBatch(
       ],
       model_version: options.modelVersion ?? MINERU_DEFAULT_MODEL_VERSION,
     }),
-    signal: AbortSignal.timeout(30_000),
+    signal: AbortSignal.timeout(MINERU_BATCH_REQUEST_TIMEOUT_MS),
   });
 
   const json = (await response.json().catch(() => ({}))) as MinerUApiResponse<MinerUUploadBatchData>;
@@ -175,7 +178,7 @@ export async function uploadFileToMinerU(
     method: 'PUT',
     headers,
     body,
-    signal: AbortSignal.timeout(60_000),
+    signal: AbortSignal.timeout(MINERU_FILE_TRANSFER_TIMEOUT_MS),
   });
 
   if (!response.ok) {
@@ -193,7 +196,7 @@ export async function pollMinerUBatchResult(
   while (Date.now() <= timeoutAt) {
     const response = await fetch(`${apiRoot}/extract-results/batch/${options.batchId}`, {
       headers: buildMinerUHeaders(options.apiKey),
-      signal: AbortSignal.timeout(30_000),
+      signal: AbortSignal.timeout(MINERU_STATUS_REQUEST_TIMEOUT_MS),
     });
 
     const json =
@@ -227,7 +230,7 @@ export async function pollMinerUBatchResult(
 
 export async function downloadMinerUArchive(fullZipUrl: string): Promise<Buffer> {
   const response = await fetch(fullZipUrl, {
-    signal: AbortSignal.timeout(60_000),
+    signal: AbortSignal.timeout(MINERU_FILE_TRANSFER_TIMEOUT_MS),
   });
 
   if (!response.ok) {
