@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -52,8 +53,8 @@ function loadTsModule(absPath) {
     fileName: resolved,
   });
 
-  const module = { exports: {} };
-  moduleCache.set(resolved, module);
+  const loadedModule = { exports: {} };
+  moduleCache.set(resolved, loadedModule);
   const dirname = path.dirname(resolved);
 
   function sandboxRequire(specifier) {
@@ -73,8 +74,8 @@ function loadTsModule(absPath) {
     { filename: resolved },
   );
   const fn = wrapper.runInThisContext();
-  fn(sandboxRequire, module, module.exports, resolved, dirname);
-  return module.exports;
+  fn(sandboxRequire, loadedModule, loadedModule.exports, resolved, dirname);
+  return loadedModule.exports;
 }
 
 async function withCapturedTimeouts(run) {
@@ -87,7 +88,7 @@ async function withCapturedTimeouts(run) {
     return { timeoutMs: ms };
   };
 
-  global.fetch = async (_input, init = {}) => ({
+  global.fetch = async (_input, _init = {}) => ({
     ok: true,
     status: 200,
     statusText: 'OK',
@@ -119,10 +120,10 @@ async function main() {
   const helperPath = path.join(repoRoot, 'lib', 'pdf', 'mineru-hosted.ts');
   const helper = loadTsModule(helperPath);
 
-  assert.equal(helper.MINERU_BATCH_REQUEST_TIMEOUT_MS, 60_000);
-  assert.equal(helper.MINERU_STATUS_REQUEST_TIMEOUT_MS, 60_000);
-  assert.equal(helper.MINERU_FILE_TRANSFER_TIMEOUT_MS, 5 * 60_000);
-  assert.equal(helper.MINERU_POLL_TIMEOUT_MS, 10 * 60_000);
+  assert.equal(helper.MINERU_BATCH_REQUEST_TIMEOUT_MS, 2 * 60_000);
+  assert.equal(helper.MINERU_STATUS_REQUEST_TIMEOUT_MS, 2 * 60_000);
+  assert.equal(helper.MINERU_FILE_TRANSFER_TIMEOUT_MS, 15 * 60_000);
+  assert.equal(helper.MINERU_POLL_TIMEOUT_MS, 20 * 60_000);
 
   const batchTimeouts = await withCapturedTimeouts(async () => {
     await helper.createMinerUUploadBatch({

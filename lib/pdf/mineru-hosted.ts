@@ -5,11 +5,11 @@ import type { PDFParserConfig } from './types';
 export const MINERU_OFFICIAL_API_ROOT = 'https://mineru.net/api/v4';
 const MINERU_OFFICIAL_SITE_ROOT = 'https://mineru.net';
 export const MINERU_DEFAULT_MODEL_VERSION = 'vlm';
-export const MINERU_BATCH_REQUEST_TIMEOUT_MS = 60_000;
-export const MINERU_STATUS_REQUEST_TIMEOUT_MS = 60_000;
-export const MINERU_FILE_TRANSFER_TIMEOUT_MS = 5 * 60_000;
+export const MINERU_BATCH_REQUEST_TIMEOUT_MS = 2 * 60_000;
+export const MINERU_STATUS_REQUEST_TIMEOUT_MS = 2 * 60_000;
+export const MINERU_FILE_TRANSFER_TIMEOUT_MS = 15 * 60_000;
 export const MINERU_POLL_INTERVAL_MS = 2_000;
-export const MINERU_POLL_TIMEOUT_MS = 10 * 60_000;
+export const MINERU_POLL_TIMEOUT_MS = 20 * 60_000;
 
 interface MinerUApiResponse<T> {
   code?: number;
