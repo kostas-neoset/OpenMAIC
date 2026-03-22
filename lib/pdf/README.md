@@ -11,9 +11,11 @@
 - **要求**: 无
 - **使用**: 直接上传 PDF 文件
 
-### 2. MinerU (本地部署)
+### 2. MinerU（官方云端或本地部署）
 
-- **成本**: 免费（需要自己部署）
+- **成本**:
+  - 官方云端：按 MinerU 官方计费
+  - 本地部署：免费（需要自己部署）
 - **特性**:
   - 高级文本提取（保留 Markdown 布局）
   - 表格识别
@@ -21,13 +23,15 @@
   - 更好的 OCR 支持
   - 多种输出格式（markdown, JSON, docx, html, latex）
 - **要求**:
-  - 部署 MinerU 服务（Docker 或源码）
-  - 配置服务器地址
-- **优势**: 数据隐私、无文件大小限制
+  - 官方云端：API Key（Base URL 可留空，默认使用 `https://mineru.net/api/v4`）
+  - 本地部署：部署 MinerU 服务（Docker 或源码）并配置服务器地址
+- **优势**:
+  - 官方云端：配置简单、无需维护服务
+  - 本地部署：数据隐私、无文件大小限制
 
 ## 快速开始
 
-### 部署 MinerU（可选）
+### 部署自托管 MinerU（可选）
 
 ```bash
 # Docker 部署（推荐）
@@ -63,6 +67,23 @@ const formData = new FormData();
 formData.append('pdf', pdfFile);
 formData.append('providerId', 'mineru');
 formData.append('baseUrl', 'http://localhost:8080');
+
+const response = await fetch('/api/parse-pdf', {
+  method: 'POST',
+  body: formData,
+});
+
+const result = await response.json();
+// result.data: ParsedPdfContent with imageMapping
+```
+
+#### 使用 MinerU（官方云端）
+
+```typescript
+const formData = new FormData();
+formData.append('pdf', pdfFile);
+formData.append('providerId', 'mineru');
+formData.append('apiKey', 'your-mineru-api-key');
 
 const response = await fetch('/api/parse-pdf', {
   method: 'POST',
@@ -128,6 +149,8 @@ MinerU 解析器与内容生成流程无缝集成：
 const parseResult = await parsePDF(
   {
     providerId: 'mineru',
+    // Hosted MinerU: omit baseUrl and provide apiKey instead.
+    // Self-hosted MinerU: set baseUrl to your own server URL.
     baseUrl: 'http://localhost:8080',
   },
   buffer,
@@ -174,6 +197,19 @@ MinerU 的图片处理：
 ```typescript
 import { useSettingsStore } from '@/lib/store/settings';
 
+useSettingsStore.setState({
+  pdfProviderId: 'mineru',
+  pdfProvidersConfig: {
+    mineru: {
+      apiKey: 'your-mineru-api-key',
+    },
+  },
+});
+```
+
+如果是自托管 MinerU，可以同时配置：
+
+```typescript
 useSettingsStore.setState({
   pdfProviderId: 'mineru',
   pdfProvidersConfig: {

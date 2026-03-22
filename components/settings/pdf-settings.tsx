@@ -12,6 +12,9 @@ import type { PDFProviderId } from '@/lib/pdf/types';
 import { CheckCircle2, Eye, EyeOff, Loader2, Zap, XCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
+const MINERU_OFFICIAL_SITE_ROOT = 'https://mineru.net';
+const MINERU_OFFICIAL_API_ROOT = 'https://mineru.net/api/v4';
+
 /**
  * Get display label for feature
  */
@@ -25,6 +28,42 @@ function getFeatureLabel(feature: string, t: (key: string) => string): string {
     metadata: t('settings.featureMetadata'),
   };
   return labels[feature] || feature;
+}
+
+function normalizeMinerUPreviewBaseUrl(baseUrl?: string): string {
+  const trimmed = baseUrl?.trim();
+  if (!trimmed) return MINERU_OFFICIAL_API_ROOT;
+
+  try {
+    const parsed = new URL(trimmed);
+    const normalizedOrigin = parsed.origin.replace(/\/+$/, '');
+    const normalizedPath = parsed.pathname.replace(/\/+$/, '');
+
+    if (
+      normalizedOrigin === MINERU_OFFICIAL_SITE_ROOT &&
+      (normalizedPath === '' || normalizedPath === '/')
+    ) {
+      return MINERU_OFFICIAL_API_ROOT;
+    }
+  } catch {
+    // Ignore parse failures and fall back to trimmed text.
+  }
+
+  return trimmed.replace(/\/+$/, '');
+}
+
+function isHostedMinerUConfig(baseUrl?: string): boolean {
+  if (!baseUrl?.trim()) return true;
+  const normalized = normalizeMinerUPreviewBaseUrl(baseUrl);
+  return (
+    normalized === MINERU_OFFICIAL_API_ROOT ||
+    normalized.startsWith(`${MINERU_OFFICIAL_API_ROOT}/`)
+  );
+}
+
+function getMinerURequestPreview(baseUrl?: string): string {
+  const normalized = normalizeMinerUPreviewBaseUrl(baseUrl);
+  return isHostedMinerUConfig(baseUrl) ? `${normalized}/file-urls/batch` : `${normalized}/file_parse`;
 }
 
 interface PDFSettingsProps {
@@ -43,7 +82,12 @@ export function PDFSettings({ selectedProviderId }: PDFSettingsProps) {
   const pdfProvider = PDF_PROVIDERS[selectedProviderId];
   const isServerConfigured = !!pdfProvidersConfig[selectedProviderId]?.isServerConfigured;
   const providerConfig = pdfProvidersConfig[selectedProviderId];
-  const hasBaseUrl = !!providerConfig?.baseUrl;
+  const isMinerU = selectedProviderId === 'mineru';
+  const isHostedMinerU = isMinerU && isHostedMinerUConfig(providerConfig?.baseUrl);
+  const canTestConnection = isMinerU
+    ? Boolean(providerConfig?.apiKey || providerConfig?.baseUrl || isServerConfigured)
+    : Boolean(providerConfig?.baseUrl);
+  const isApiKeyOptional = !isMinerU || isServerConfigured || !isHostedMinerU;
   const needsRemoteConfig = selectedProviderId === 'mineru';
 
   // Reset state when provider changes
@@ -56,8 +100,7 @@ export function PDFSettings({ selectedProviderId }: PDFSettingsProps) {
   }
 
   const handleTestConnection = async () => {
-    const baseUrl = providerConfig?.baseUrl;
-    if (!baseUrl) return;
+    if (!canTestConnection) return;
 
     setTestStatus('testing');
     setTestMessage('');
@@ -69,7 +112,7 @@ export function PDFSettings({ selectedProviderId }: PDFSettingsProps) {
         body: JSON.stringify({
           providerId: selectedProviderId,
           apiKey: providerConfig?.apiKey || '',
-          baseUrl,
+          baseUrl: providerConfig?.baseUrl || undefined,
         }),
       });
 
@@ -77,7 +120,7 @@ export function PDFSettings({ selectedProviderId }: PDFSettingsProps) {
 
       if (data.success) {
         setTestStatus('success');
-        setTestMessage(t('settings.connectionSuccess'));
+        setTestMessage(data.message || t('settings.connectionSuccess'));
       } else {
         setTestStatus('error');
         setTestMessage(`${t('settings.connectionFailed')}: ${data.error}`);
@@ -103,7 +146,9 @@ export function PDFSettings({ selectedProviderId }: PDFSettingsProps) {
         <>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label className="text-sm">{t('settings.pdfBaseUrl')}</Label>
+              <Label className="text-sm">
+                {isMinerU ? t('settings.baseUrlOptional') : t('settings.pdfBaseUrl')}
+              </Label>
               <div className="flex gap-2">
                 <Input
                   name={`pdf-base-url-${selectedProviderId}`}
@@ -111,7 +156,7 @@ export function PDFSettings({ selectedProviderId }: PDFSettingsProps) {
                   autoCapitalize="none"
                   autoCorrect="off"
                   spellCheck={false}
-                  placeholder="http://localhost:8080"
+                  placeholder={isMinerU ? 'https://mineru.net/api/v4' : 'http://localhost:8080'}
                   value={providerConfig?.baseUrl || ''}
                   onChange={(e) =>
                     setPDFProviderConfig(selectedProviderId, { baseUrl: e.target.value })
@@ -122,7 +167,7 @@ export function PDFSettings({ selectedProviderId }: PDFSettingsProps) {
                   variant="outline"
                   size="sm"
                   onClick={handleTestConnection}
-                  disabled={testStatus === 'testing' || !hasBaseUrl}
+                  disabled={testStatus === 'testing' || !canTestConnection}
                   className="gap-1.5 shrink-0"
                 >
                   {testStatus === 'testing' ? (
@@ -135,14 +180,19 @@ export function PDFSettings({ selectedProviderId }: PDFSettingsProps) {
                   )}
                 </Button>
               </div>
+              {isMinerU && (
+                <p className="text-xs text-muted-foreground">{t('settings.mineruHostedBaseUrlHint')}</p>
+              )}
             </div>
 
             <div className="space-y-2">
               <Label className="text-sm">
                 {t('settings.pdfApiKey')}
-                <span className="text-muted-foreground ml-1 font-normal">
-                  ({t('settings.optional')})
-                </span>
+                {isApiKeyOptional && (
+                  <span className="text-muted-foreground ml-1 font-normal">
+                    ({t('settings.optional')})
+                  </span>
+                )}
               </Label>
               <div className="relative">
                 <Input
@@ -153,7 +203,11 @@ export function PDFSettings({ selectedProviderId }: PDFSettingsProps) {
                   autoCorrect="off"
                   spellCheck={false}
                   placeholder={
-                    isServerConfigured ? t('settings.optionalOverride') : t('settings.enterApiKey')
+                    isServerConfigured
+                      ? t('settings.optionalOverride')
+                      : isMinerU
+                        ? t('settings.enterMinerUApiKey')
+                        : t('settings.enterApiKey')
                   }
                   value={providerConfig?.apiKey || ''}
                   onChange={(e) =>
@@ -173,6 +227,13 @@ export function PDFSettings({ selectedProviderId }: PDFSettingsProps) {
               </div>
             </div>
           </div>
+
+          {isMinerU && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50/70 p-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-100">
+              <p>{t('settings.mineruHostedDescription')}</p>
+              <p className="mt-2">{t('settings.mineruSelfHostedDescription')}</p>
+            </div>
+          )}
 
           {/* Test result message */}
           {testMessage && (
@@ -195,9 +256,8 @@ export function PDFSettings({ selectedProviderId }: PDFSettingsProps) {
 
           {/* Request URL Preview */}
           {(() => {
-            const effectiveBaseUrl = providerConfig?.baseUrl || '';
-            if (!effectiveBaseUrl) return null;
-            const fullUrl = effectiveBaseUrl + '/file_parse';
+            if (!isMinerU) return null;
+            const fullUrl = getMinerURequestPreview(providerConfig?.baseUrl);
             return (
               <p className="text-xs text-muted-foreground break-all">
                 {t('settings.requestUrl')}: {fullUrl}

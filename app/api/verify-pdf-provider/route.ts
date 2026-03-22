@@ -3,6 +3,10 @@ import { createLogger } from '@/lib/logger';
 import { apiError, apiSuccess } from '@/lib/server/api-response';
 import { resolvePDFApiKey, resolvePDFBaseUrl } from '@/lib/server/provider-config';
 import { validateUrlForSSRF } from '@/lib/server/ssrf-guard';
+import {
+  getMinerUHostedVerificationUrl,
+  isMinerUHostedConfig,
+} from '@/lib/pdf/mineru-hosted';
 
 const log = createLogger('Verify PDF Provider');
 
@@ -23,20 +27,42 @@ export async function POST(req: NextRequest) {
     }
 
     const resolvedBaseUrl = clientBaseUrl ? clientBaseUrl : resolvePDFBaseUrl(providerId, baseUrl);
-    if (!resolvedBaseUrl) {
-      return apiError('MISSING_REQUIRED_FIELD', 400, 'Base URL is required');
-    }
-
     const resolvedApiKey = clientBaseUrl
       ? (apiKey as string | undefined) || ''
       : resolvePDFApiKey(providerId, apiKey);
+    const isHostedMinerU =
+      providerId === 'mineru' &&
+      isMinerUHostedConfig({ providerId: 'mineru', baseUrl: resolvedBaseUrl });
+
+    if (isHostedMinerU) {
+      if (!resolvedApiKey) {
+        return apiError(
+          'MISSING_API_KEY',
+          400,
+          'MinerU API key is required for the official hosted API',
+        );
+      }
+
+      return apiSuccess({
+        message: 'Hosted MinerU is configured. Upload a PDF to verify end-to-end parsing.',
+        status: 200,
+        mode: 'hosted',
+        requestUrl: getMinerUHostedVerificationUrl(resolvedBaseUrl),
+      });
+    }
+
+    const requestUrl = resolvedBaseUrl;
+
+    if (!requestUrl) {
+      return apiError('MISSING_REQUIRED_FIELD', 400, 'Base URL is required');
+    }
 
     const headers: Record<string, string> = {};
     if (resolvedApiKey) {
       headers['Authorization'] = `Bearer ${resolvedApiKey}`;
     }
 
-    const response = await fetch(resolvedBaseUrl, {
+    const response = await fetch(requestUrl, {
       headers,
       signal: AbortSignal.timeout(10000),
       redirect: 'manual',
@@ -46,11 +72,14 @@ export async function POST(req: NextRequest) {
       return apiError('REDIRECT_NOT_ALLOWED', 403, 'Redirects are not allowed');
     }
 
-    // MinerU's FastAPI root returns 404 (no root route), but the server is reachable.
-    // Any HTTP response (including 404) means the server is up.
+    // For self-hosted MinerU, the FastAPI root may return 404.
+    // For hosted MinerU, the batch endpoint may return 401/403/405 on a probe request.
+    // Any direct HTTP response means the service is reachable.
     return apiSuccess({
       message: 'Connection successful',
       status: response.status,
+      mode: providerId === 'mineru' ? 'self-hosted' : 'remote',
+      requestUrl,
     });
   } catch (error) {
     log.error('PDF provider test error:', error);

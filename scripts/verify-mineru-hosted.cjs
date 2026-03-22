@@ -110,6 +110,32 @@ async function buildFixtureZip() {
   return zip.generateAsync({ type: 'nodebuffer' });
 }
 
+async function buildNestedFixtureZip() {
+  const zip = new JSZip();
+  zip.file(
+    'job-123/full.md',
+    '# Nested MinerU archive\n\nThis archive uses a wrapper folder.\n\n![figure](images/img_1.png)\n',
+  );
+  zip.file(
+    'job-123/sample_content_list.json',
+    JSON.stringify(
+      [
+        {
+          type: 'image',
+          img_path: 'images/img_1.png',
+          image_caption: ['Nested Figure'],
+          bbox: [0, 0, 200, 120],
+          page_idx: 0,
+        },
+      ],
+      null,
+      2,
+    ),
+  );
+  zip.file('job-123/images/img_1.png', Buffer.from('nested-fake-png-bytes'));
+  return zip.generateAsync({ type: 'nodebuffer' });
+}
+
 async function main() {
   const helperPath = path.join(repoRoot, 'lib', 'pdf', 'mineru-hosted.ts');
   const helper = loadTsModule(helperPath);
@@ -142,6 +168,15 @@ async function main() {
   assert.equal(parsed.metadata.pdfImages.length, 1);
   assert.equal(parsed.metadata.pdfImages[0].pageNumber, 1);
   assert.equal(parsed.metadata.pdfImages[0].description, 'Figure 1');
+
+  const nestedArchive = await buildNestedFixtureZip();
+  const nestedParsed = await helper.parseMinerUArchive(nestedArchive);
+
+  assert.equal(nestedParsed.images.length, 1);
+  assert.equal(nestedParsed.text.includes('![figure](img_1)'), true);
+  assert.equal(nestedParsed.metadata.pageCount, 1);
+  assert.equal(nestedParsed.metadata.imageMapping.img_1, nestedParsed.images[0]);
+  assert.equal(nestedParsed.metadata.pdfImages[0].description, 'Nested Figure');
 
   console.log('MinerU hosted helper verification passed.');
 }

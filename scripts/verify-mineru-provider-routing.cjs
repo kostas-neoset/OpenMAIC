@@ -133,71 +133,135 @@ async function main() {
   const { parsePDF } = loadTsModule(pdfProvidersPath);
 
   const fixtureArchive = await buildFixtureZip();
-  const calls = [];
   const originalFetch = global.fetch;
 
-  global.fetch = async (url, options = {}) => {
-    calls.push({ url: String(url), method: options.method || 'GET' });
-
-    if (String(url).endsWith('/file-urls/batch')) {
-      return new Response(
-        JSON.stringify({
-          code: 0,
-          data: {
-            batch_id: 'batch-123',
-            file_urls: ['https://upload.example.com/document.pdf'],
-          },
-        }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } },
-      );
-    }
-
-    if (String(url) === 'https://upload.example.com/document.pdf') {
-      return new Response(null, { status: 200 });
-    }
-
-    if (String(url).includes('/extract-results/batch/batch-123')) {
-      return new Response(
-        JSON.stringify({
-          code: 0,
-          data: {
-            extract_result: {
-              state: 'done',
-              full_zip_url: 'https://download.example.com/full.zip',
-            },
-          },
-        }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } },
-      );
-    }
-
-    if (String(url) === 'https://download.example.com/full.zip') {
-      return new Response(fixtureArchive, { status: 200 });
-    }
-
-    throw new Error(`Unexpected fetch call: ${String(url)}`);
-  };
-
   try {
-    const parsed = await parsePDF(
-      {
-        providerId: 'mineru',
-        apiKey: 'test-key',
-      },
-      Buffer.from('%PDF-1.4 fake pdf'),
-    );
+    {
+      const calls = [];
+      global.fetch = async (url, options = {}) => {
+        calls.push({ url: String(url), method: options.method || 'GET' });
 
-    assert.equal(parsed.metadata?.parser, 'mineru');
-    assert.equal(parsed.metadata?.pageCount, 1);
-    assert.equal(parsed.metadata?.pdfImages?.[0]?.description, 'Hosted figure');
-    assert.equal(parsed.metadata?.imageMapping?.img_1, parsed.images[0]);
-    assert.equal(
-      calls.some(({ url }) => url.endsWith('/file-urls/batch')),
-      true,
-      'Hosted MinerU flow should request an upload batch',
-    );
+        if (String(url).endsWith('/file-urls/batch')) {
+          return new Response(
+            JSON.stringify({
+              code: 0,
+              data: {
+                batch_id: 'batch-123',
+                file_urls: ['https://upload.example.com/document.pdf'],
+              },
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          );
+        }
 
-    console.log('MinerU provider hosted routing verification passed.');
+        if (String(url) === 'https://upload.example.com/document.pdf') {
+          return new Response(null, { status: 200 });
+        }
+
+        if (String(url).includes('/extract-results/batch/batch-123')) {
+          return new Response(
+            JSON.stringify({
+              code: 0,
+              data: {
+                extract_result: {
+                  state: 'done',
+                  full_zip_url: 'https://download.example.com/full.zip',
+                },
+              },
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+
+        if (String(url) === 'https://download.example.com/full.zip') {
+          return new Response(fixtureArchive, { status: 200 });
+        }
+
+        throw new Error(`Unexpected hosted fetch call: ${String(url)}`);
+      };
+
+      const parsed = await parsePDF(
+        {
+          providerId: 'mineru',
+          apiKey: 'test-key',
+        },
+        Buffer.from('%PDF-1.4 fake pdf'),
+      );
+
+      assert.equal(parsed.metadata?.parser, 'mineru');
+      assert.equal(parsed.metadata?.pageCount, 1);
+      assert.equal(parsed.metadata?.pdfImages?.[0]?.description, 'Hosted figure');
+      assert.equal(parsed.metadata?.imageMapping?.img_1, parsed.images[0]);
+      assert.equal(
+        calls.some(({ url }) => url.endsWith('/file-urls/batch')),
+        true,
+        'Hosted MinerU flow should request an upload batch',
+      );
+      assert.equal(
+        calls.some(({ url }) => url.includes('/file_parse')),
+        false,
+        'Hosted MinerU flow should not hit the self-hosted file_parse endpoint',
+      );
+    }
+
+    {
+      const calls = [];
+      global.fetch = async (url, options = {}) => {
+        calls.push({ url: String(url), method: options.method || 'GET' });
+
+        if (String(url) === 'http://localhost:8080/file_parse') {
+          return new Response(
+            JSON.stringify({
+              results: {
+                'document.pdf': {
+                  md_content: '# Self-hosted MinerU\n\n![figure](img_1)\n',
+                  images: {
+                    'figure-1.png': 'ZmFrZS1iYXNlNjQ=',
+                  },
+                  content_list: [
+                    {
+                      type: 'image',
+                      img_path: 'images/figure-1.png',
+                      image_caption: ['Self-hosted figure'],
+                      bbox: [0, 0, 100, 100],
+                      page_idx: 0,
+                    },
+                  ],
+                },
+              },
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+
+        throw new Error(`Unexpected self-hosted fetch call: ${String(url)}`);
+      };
+
+      const parsed = await parsePDF(
+        {
+          providerId: 'mineru',
+          baseUrl: 'http://localhost:8080',
+        },
+        Buffer.from('%PDF-1.4 fake pdf'),
+      );
+
+      assert.equal(parsed.metadata?.parser, 'mineru');
+      assert.equal(parsed.metadata?.pageCount, 1);
+      assert.equal(parsed.metadata?.pdfImages?.[0]?.description, 'Self-hosted figure');
+      assert.equal(parsed.metadata?.imageMapping?.img_1, parsed.images[0]);
+      assert.equal(
+        calls.some(({ url }) => url === 'http://localhost:8080/file_parse'),
+        true,
+        'Self-hosted MinerU flow should still call /file_parse',
+      );
+      assert.equal(
+        calls.some(({ url }) => url.endsWith('/file-urls/batch')),
+        false,
+        'Self-hosted MinerU flow should not call the hosted batch API',
+      );
+    }
+
+    console.log('MinerU provider hosted and self-hosted routing verification passed.');
   } finally {
     global.fetch = originalFetch;
   }

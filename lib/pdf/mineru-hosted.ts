@@ -111,6 +111,19 @@ export function isMinerUHostedConfig(
   );
 }
 
+export function getMinerUHostedVerificationUrl(baseUrl?: string): string {
+  return `${normalizeMinerUApiRoot(baseUrl)}/file-urls/batch`;
+}
+
+export function getMinerURequestPreviewUrl(baseUrl?: string): string {
+  const trimmed = baseUrl?.trim();
+  if (!trimmed || isMinerUHostedConfig({ providerId: 'mineru', baseUrl: trimmed })) {
+    return getMinerUHostedVerificationUrl(trimmed);
+  }
+
+  return `${trimmed.replace(/\/+$/, '')}/file_parse`;
+}
+
 export async function createMinerUUploadBatch(
   options: MinerUUploadBatchOptions,
 ): Promise<MinerUUploadBatchResponse> {
@@ -118,7 +131,7 @@ export async function createMinerUUploadBatch(
     throw new Error('MinerU API key is required for hosted MinerU uploads.');
   }
 
-  const response = await fetch(`${normalizeMinerUApiRoot(options.baseUrl)}/file-urls/batch`, {
+  const response = await fetch(getMinerUHostedVerificationUrl(options.baseUrl), {
     method: 'POST',
     headers: buildMinerUHeaders(options.apiKey),
     body: JSON.stringify({
@@ -263,7 +276,10 @@ export async function extractMinerUArchivePayload(archive: Buffer): Promise<Mine
 
   for (const entry of imageEntries) {
     const base64 = await entry.async('base64');
-    imagesByPath[entry.name] = `data:${guessMimeType(entry.name)};base64,${base64}`;
+    const dataUrl = `data:${guessMimeType(entry.name)};base64,${base64}`;
+    for (const alias of getMinerUImagePathAliases(entry.name)) {
+      imagesByPath[alias] = dataUrl;
+    }
   }
 
   return {
@@ -283,13 +299,12 @@ export function buildParsedPdfContentFromMinerUPayload(
 
   imagePathCandidates.forEach((imgPath, index) => {
     const imageId = `img_${index + 1}`;
-    const base64Url =
-      payload.imagesByPath[imgPath] || payload.imagesByPath[normalizeImagePath(imgPath)] || '';
+    const base64Url = getImageDataUrl(payload.imagesByPath, imgPath);
     if (!base64Url) return;
 
-    imagePathToId.set(imgPath, imageId);
-    imagePathToId.set(normalizeImagePath(imgPath), imageId);
-    imagePathToId.set(getBasename(imgPath), imageId);
+    for (const alias of getMinerUImagePathAliases(imgPath)) {
+      imagePathToId.set(alias, imageId);
+    }
     imageMapping[imageId] = base64Url;
 
     const meta = findImageMeta(payload.contentList, imgPath);
@@ -347,15 +362,51 @@ function collectImagePaths(
 
   for (const item of contentList) {
     if (item.type === 'image' && item.img_path) {
-      ordered.add(normalizeImagePath(item.img_path));
+      ordered.add(getCanonicalMinerUImagePath(item.img_path));
     }
   }
 
   for (const pathKey of Object.keys(imagesByPath).sort()) {
-    ordered.add(normalizeImagePath(pathKey));
+    ordered.add(getCanonicalMinerUImagePath(pathKey));
   }
 
-  return Array.from(ordered);
+  return Array.from(ordered).filter(Boolean);
+}
+
+function getImageDataUrl(imagesByPath: Record<string, string>, imgPath: string): string {
+  for (const alias of getMinerUImagePathAliases(imgPath)) {
+    const dataUrl = imagesByPath[alias];
+    if (dataUrl) return dataUrl;
+  }
+
+  return '';
+}
+
+function getMinerUImagePathAliases(imgPath: string): string[] {
+  const normalized = normalizeImagePath(imgPath);
+  const aliases = new Set<string>([normalized, getBasename(normalized)]);
+  const imagesIndex = normalized.lastIndexOf('/images/');
+
+  if (normalized.startsWith('images/')) {
+    aliases.add(normalized);
+  } else if (imagesIndex >= 0) {
+    aliases.add(normalized.slice(imagesIndex + 1));
+  }
+
+  return Array.from(aliases);
+}
+
+function getCanonicalMinerUImagePath(imgPath: string): string {
+  const aliases = getMinerUImagePathAliases(imgPath);
+  const imageAlias = aliases.find((alias) => alias.startsWith('images/'));
+  if (imageAlias) return imageAlias;
+
+  const normalized = normalizeImagePath(imgPath);
+  if (!normalized.includes('/')) {
+    return `images/${normalized}`;
+  }
+
+  return normalized;
 }
 
 function normalizeImagePath(imgPath: string): string {

@@ -153,7 +153,22 @@ docker compose up --build
 
 [MinerU](https://github.com/opendatalab/MinerU) 提供更强的表格、公式和 OCR 解析能力。你可以使用 [MinerU 官方 API](https://mineru.net/) 或[自行部署](https://opendatalab.github.io/MinerU/quick_start/docker_deployment/)。
 
-在 `.env.local` 中设置 `PDF_MINERU_BASE_URL`（如需认证则同时设置 `PDF_MINERU_API_KEY`）。
+如果使用官方 MinerU 云端服务，在 `.env.local` 中设置：
+
+```env
+PDF_MINERU_API_KEY=your_mineru_key
+```
+
+此时可以将 `PDF_MINERU_BASE_URL` 留空，系统会自动使用 `https://mineru.net/api/v4`。
+
+如果使用自托管 MinerU 服务，在 `.env.local` 中设置：
+
+```env
+PDF_MINERU_BASE_URL=http://localhost:8080
+PDF_MINERU_API_KEY=optional_if_your_server_requires_it
+```
+
+如果你部署到 Vercel，也要在 Vercel 项目设置中添加同样的变量，重新部署后再上传一个真实 PDF 做最终验证。
 
 ---
 

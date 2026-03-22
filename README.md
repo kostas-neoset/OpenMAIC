@@ -153,7 +153,22 @@ docker compose up --build
 
 [MinerU](https://github.com/opendatalab/MinerU) provides enhanced parsing for complex tables, formulas, and OCR. You can use the [MinerU official API](https://mineru.net/) or [self-host your own instance](https://opendatalab.github.io/MinerU/quick_start/docker_deployment/).
 
-Set `PDF_MINERU_BASE_URL` (and `PDF_MINERU_API_KEY` if needed) in `.env.local`.
+For the official MinerU cloud, set:
+
+```env
+PDF_MINERU_API_KEY=your_mineru_key
+```
+
+Leave `PDF_MINERU_BASE_URL` empty to use `https://mineru.net/api/v4` automatically.
+
+For a self-hosted MinerU server, set:
+
+```env
+PDF_MINERU_BASE_URL=http://localhost:8080
+PDF_MINERU_API_KEY=optional_if_your_server_requires_it
+```
+
+If you deploy on Vercel, add the same variables in the Vercel project settings, redeploy, and then test one real PDF upload.
 
 ---
 

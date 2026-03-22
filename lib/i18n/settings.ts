@@ -459,8 +459,14 @@ export const settingsZhCN = {
     mineruWarning: '注意',
     mineruCostWarning: 'MinerU 为商用服务，使用可能产生费用。请查看 MinerU 官网了解定价详情。',
     enterMinerUApiKey: '输入 MinerU API Key',
+    mineruHostedDescription:
+      '官方 MinerU 云端模式：填写 API Key 即可使用，Base URL 留空时默认使用 https://mineru.net/api/v4 。',
+    mineruHostedBaseUrlHint:
+      '官方 MinerU 云端的 Base URL 可留空；只有使用自定义端点时才需要填写。',
     mineruLocalDescription:
       'MinerU 支持本地部署，提供高级 PDF 解析功能（表格、公式、布局分析）。需要先部署 MinerU 服务。',
+    mineruSelfHostedDescription:
+      '自托管 MinerU：填写你的本地或私有服务地址，例如 http://localhost:8080 。',
     mineruServerAddress: '本地 MinerU 服务器地址（如：http://localhost:8080）',
     mineruApiKeyOptional: '仅在服务器启用认证时需要',
     optionalApiKey: '可选的 API Key',
@@ -1048,8 +1054,14 @@ export const settingsEnUS = {
     mineruCostWarning:
       'MinerU is a commercial service and may incur fees. Please check the MinerU website for pricing details.',
     enterMinerUApiKey: 'Enter MinerU API Key',
+    mineruHostedDescription:
+      'Official MinerU cloud: add your API key and leave Base URL empty unless you need a custom endpoint.',
+    mineruHostedBaseUrlHint:
+      'Base URL is optional for the official MinerU cloud. Leave it empty to use https://mineru.net/api/v4.',
     mineruLocalDescription:
       'MinerU supports local deployment with advanced PDF parsing (tables, formulas, layout analysis). Requires deploying MinerU service first.',
+    mineruSelfHostedDescription:
+      'Self-hosted MinerU: enter your local or private MinerU server URL, for example http://localhost:8080.',
     mineruServerAddress: 'Local MinerU server address (e.g., http://localhost:8080)',
     mineruApiKeyOptional: 'Only required if server has authentication enabled',
     optionalApiKey: 'Optional API Key',
