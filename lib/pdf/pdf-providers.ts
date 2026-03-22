@@ -143,6 +143,14 @@ import type { PDFParserConfig } from './types';
 import type { ParsedPdfContent } from '@/lib/types/pdf';
 import { PDF_PROVIDERS } from './constants';
 import { createLogger } from '@/lib/logger';
+import {
+  createMinerUUploadBatch,
+  downloadMinerUArchive,
+  isMinerUHostedConfig,
+  parseMinerUArchive,
+  pollMinerUBatchResult,
+  uploadFileToMinerU,
+} from './mineru-hosted';
 
 const log = createLogger('PDFProviders');
 
@@ -277,6 +285,42 @@ async function parseWithMinerU(
   config: PDFParserConfig,
   pdfBuffer: Buffer,
 ): Promise<ParsedPdfContent> {
+  const fileName = 'document.pdf';
+
+  if (isMinerUHostedConfig(config)) {
+    if (!config.apiKey) {
+      throw new Error('MinerU API key is required for hosted MinerU parsing.');
+    }
+
+    log.info('[MinerU] Parsing PDF with hosted MinerU API');
+
+    const { batchId, uploadUrl } = await createMinerUUploadBatch({
+      apiKey: config.apiKey,
+      fileName,
+      baseUrl: config.baseUrl,
+    });
+    await uploadFileToMinerU(uploadUrl, pdfBuffer);
+
+    const extractResult = await pollMinerUBatchResult({
+      apiKey: config.apiKey,
+      batchId,
+      baseUrl: config.baseUrl,
+    });
+
+    if (!extractResult.full_zip_url) {
+      throw new Error('MinerU hosted parsing finished without a downloadable result archive.');
+    }
+
+    const archive = await downloadMinerUArchive(extractResult.full_zip_url);
+    const result = await parseMinerUArchive(archive);
+
+    if (result.metadata) {
+      result.metadata.taskId = batchId;
+    }
+
+    return result;
+  }
+
   if (!config.baseUrl) {
     throw new Error(
       'MinerU base URL is required. ' +
@@ -286,8 +330,6 @@ async function parseWithMinerU(
   }
 
   log.info('[MinerU] Parsing PDF with MinerU server:', config.baseUrl);
-
-  const fileName = 'document.pdf';
 
   // Create FormData for file upload
   const formData = new FormData();

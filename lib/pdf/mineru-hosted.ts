@@ -3,6 +3,7 @@ import type { ParsedPdfContent } from '../types/pdf';
 import type { PDFParserConfig } from './types';
 
 export const MINERU_OFFICIAL_API_ROOT = 'https://mineru.net/api/v4';
+const MINERU_OFFICIAL_SITE_ROOT = 'https://mineru.net';
 export const MINERU_DEFAULT_MODEL_VERSION = 'vlm';
 export const MINERU_POLL_INTERVAL_MS = 2_000;
 export const MINERU_POLL_TIMEOUT_MS = 3 * 60_000;
@@ -77,6 +78,22 @@ type MinerUContentItem = {
 export function normalizeMinerUApiRoot(baseUrl?: string): string {
   const trimmed = baseUrl?.trim();
   if (!trimmed) return MINERU_OFFICIAL_API_ROOT;
+
+  try {
+    const parsed = new URL(trimmed);
+    const normalizedOrigin = parsed.origin.replace(/\/+$/, '');
+    const normalizedPath = parsed.pathname.replace(/\/+$/, '');
+
+    if (
+      normalizedOrigin === MINERU_OFFICIAL_SITE_ROOT &&
+      (normalizedPath === '' || normalizedPath === '/')
+    ) {
+      return MINERU_OFFICIAL_API_ROOT;
+    }
+  } catch {
+    // Fall back to string normalization for non-URL inputs.
+  }
+
   return trimmed.replace(/\/+$/, '');
 }
 

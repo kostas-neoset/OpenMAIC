@@ -117,6 +117,10 @@ async function main() {
   assert.equal(helper.MINERU_OFFICIAL_API_ROOT, 'https://mineru.net/api/v4');
   assert.equal(helper.isMinerUHostedConfig({ providerId: 'mineru' }), true);
   assert.equal(
+    helper.isMinerUHostedConfig({ providerId: 'mineru', baseUrl: 'https://mineru.net' }),
+    true,
+  );
+  assert.equal(
     helper.isMinerUHostedConfig({ providerId: 'mineru', baseUrl: 'https://mineru.net/api/v4' }),
     true,
   );
@@ -129,6 +133,7 @@ async function main() {
   const parsed = await helper.parseMinerUArchive(archive);
 
   assert.equal(parsed.text.includes('MinerU archive fixture'), true);
+  assert.equal(parsed.text.includes('![figure](img_1)'), true);
   assert.equal(parsed.images.length, 1);
   assert.equal(parsed.images[0].startsWith('data:image/png;base64,'), true);
   assert.equal(parsed.metadata.pageCount, 1);
